@@ -73,8 +73,17 @@ if __name__ == "__main__":
                 try:
                     print('Found:', f)
                     processed.append(f)
-                    send_screenshot(whurl, username, f)
-                    print('Sent to Discord')
+                    for try_i in range(3):
+                        try:
+                            send_screenshot(whurl, username, f)
+                            print('Sent to Discord')
+                            break
+                        except Exception as Err:
+                            print('Error:', Err)
+                            time.sleep(2.5)
+                    if options.remove_screenshot_file:
+                        os.remove(f)
+                        print('File removed')
                 except Exception as Err:
                     print('Error:', Err)
         age = options.max_file_age
