@@ -9,4 +9,4 @@ max_file_age_first = 90 #seconds
 #discord webhook url
 chanel_url = ""
 #remove file after send to discord
-remove_screenshot_file = True
+remove_screenshot_file = False
