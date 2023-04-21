@@ -31,9 +31,16 @@ async def async_send_screenshot(url, username, imagefile):
         
 
 def send_screenshot(url, username, imagefile):
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(async_send_screenshot(whurl, username, f))
-    loop.close()
+    for try_i in range(3):
+        try:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(async_send_screenshot(url, username, imagefile))
+            loop.close()
+            break
+        except Exception as Err:
+            if try_i == 2:
+                raise Err
+            time.sleep(2.5)
         
 
 def get_new_screenshots(d: str, maxage: int, ignore: list):
@@ -73,14 +80,8 @@ if __name__ == "__main__":
                 try:
                     print('Found:', f)
                     processed.append(f)
-                    for try_i in range(3):
-                        try:
-                            send_screenshot(whurl, username, f)
-                            print('Sent to Discord')
-                            break
-                        except Exception as Err:
-                            print('Error:', Err)
-                            time.sleep(2.5)
+                    send_screenshot(whurl, username, f)
+                    print('Sent to Discord')                        
                     if options.remove_screenshot_file:
                         os.remove(f)
                         print('File removed')
