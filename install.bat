@@ -1,6 +1,4 @@
-echo 1) Install discord.py:
-call py -3 -m pip install -U discord.py
-echo 2) Install nest_asyncio:
-call py -3 -m pip install -U nest_asyncio
-echo 3) Install psutil:
+echo 1) Install psutil:
 call py -3 -m pip install -U psutil
+echo 2) Install PIL:
+call py -3 -m pip install -U pillow
