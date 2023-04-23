@@ -1,14 +1,14 @@
-import nest_asyncio
-nest_asyncio.apply()
-import asyncio 
-import discord 
-from discord import Webhook
-import aiohttp 
 import os
 import time
 import psutil
 import options
 import sys
+import requests
+import json
+import tempfile
+from PIL import Image
+import logging
+
 
 def check_process(names: list):
     for proc in psutil.process_iter():
@@ -19,29 +19,50 @@ def check_process(names: list):
             pass
     return False
 
-
-async def async_send_screenshot(url, username, imagefile):
-    async with aiohttp.ClientSession() as session:
-        webhook = Webhook.from_url(url, session=session)
-        embed = discord.Embed(title="Screenshot from " + username)
-        file = discord.File(imagefile, filename="image.png")
-        embed.set_image(url="attachment://image.png")
         
-        await webhook.send(file=file, embed=embed)
-        
+def get_webhook_json(author_data: dict, image_name: str):
+    a = {"name": str(author_data['name'])}
+    if ('icon_url' in author_data) and (author_data['icon_url'] != ''):
+        a['icon_url'] = str(author_data['icon_url'])
+    e = {"author": a,
+         "image": {"url": f"attachment://{image_name}"}
+    }
+    if ('color' in author_data) and (author_data['color'] != 0):
+        e['color'] = int(author_data['color'])
+    return {"embeds": [e]}
 
-def send_screenshot(url, username, imagefile):
-    for try_i in range(3):
+
+def convert_image(pngfile: str):
+    img_png = Image.open(pngfile)
+    rgb_image = img_png.convert('RGB')
+    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tf:
+        rgb_image.save(tf.name)
+        return tf.name
+
+
+def send_screenshot(url: str, imagefile: str, author_data: dict):
+    jpgfile = convert_image(imagefile)
+    try:
+        j = get_webhook_json(author_data, 'image.jpg')
+        with open(jpgfile, 'rb') as f:
+            file = {'file': ('image.jpg', f, 'image/jpg', {'Expires': '0'})}
+            r = requests.post(url, files=file, data={"payload_json": json.dumps(j)})
+            r.raise_for_status()
+            return r.content
+    finally:
+        os.remove(jpgfile)
+
+
+def attempts(count: int, action, fail_action):
+    for i in range(count):
         try:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(async_send_screenshot(url, username, imagefile))
-            loop.close()
+            return action()
             break
-        except Exception as Err:
-            if try_i == 2:
-                raise Err
-            time.sleep(2.5)
-        
+        except:
+            if i == count - 1:
+                raise
+            fail_action()
+   
 
 def get_new_screenshots(d: str, maxage: int, ignore: list):
     r = []
@@ -58,15 +79,27 @@ def get_new_screenshots(d: str, maxage: int, ignore: list):
         
 if __name__ == "__main__":
     whurl = options.chanel_url
-    username = os.path.expandvars(options.username)
     screendir = os.path.expandvars(os.path.normpath(options.searchdir))
+    author = options.author
+    author['name'] = os.path.expandvars(author['name'])
 
     if not whurl:
         print('Discord webhook URL is not defined in options.py')
         sys.exit()
         
+    if not os.path.exists(screendir):
+        print('Screenshots search path not found:', screendir)
+        sys.exit()
+        
     print('Screenshots search path:', screendir)
-    print('Username in message:', username)
+    print('Username in message:', author['name'])
+    
+    if options.use_logging:
+        logfile = __file__ + '.log'
+        logging.basicConfig(level=logging.INFO, filename=logfile,filemode="w",
+                            format="%(asctime)s %(levelname)s %(message)s")
+        print('Use logging:', logfile)
+    
     print('Waiting for screenshots...')
 
     processed = []
@@ -80,13 +113,17 @@ if __name__ == "__main__":
                 try:
                     print('Found:', f)
                     processed.append(f)
-                    send_screenshot(whurl, username, f)
+                    r = attempts(3, lambda: send_screenshot(whurl, f, author), lambda: time.sleep(2.5))
+                    if options.use_logging:
+                        logging.info('Image sent: ' + str(r))
                     print('Sent to Discord')                        
                     if options.remove_screenshot_file:
                         os.remove(f)
                         print('File removed')
                 except Exception as Err:
                     print('Error:', Err)
+                    if options.use_logging:
+                        logging.error('Send image error: ' + str(Err))
         age = options.max_file_age
         for i in range(5):
             time.sleep(1)
